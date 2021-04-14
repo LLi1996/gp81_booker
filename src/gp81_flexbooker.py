@@ -5,6 +5,7 @@ import calendar
 import configparser
 import datetime
 import logging
+import operator
 import time
 from collections import defaultdict
 from typing import Tuple, Set
@@ -64,26 +65,30 @@ def parse_booking_rule(rule_csv: str,
     :param today:
     :return:
     """
-    start, end = get_current_booking_date_range(today=today)
+    start_available_date, end_available_date = get_current_booking_date_range(today=today)
     iso_weekday_2_dates = defaultdict(list)
-    date = start
-    while date <= end:
+    date = start_available_date
+    while date <= end_available_date:
         iso_weekday_2_dates[date.isoweekday()].append(date)
         date = date + datetime.timedelta(days=1)
 
-    targets = set()
-    for rule in [x.strip().lower() for x in rule_csv.split(',')]:
-        day_of_week, start_time = rule.split(' ')
-        start_hour, start_minute = start_time.split(':')
+    targets_with_priority = set()
+    for priority, rule in enumerate([x.strip().lower() for x in rule_csv.split(',')]):
+        day_of_week, session_start = rule.split(' ')
+        start_hour, start_minute = session_start.split(':')
         iso_weekday = _DAY_OF_WEEK_NAME_2_ISO_WEEKDAY[day_of_week]
-        start_time = datetime.datetime(1, 1, 1, int(start_hour), int(start_minute), 0).time()
-        if (iso_weekday, start_time) in _ISO_WEEKDAY_SESSION_START_2_SLOT_NUMBER:
+        session_start = datetime.datetime(1, 1, 1, int(start_hour), int(start_minute), 0).time()
+        if (iso_weekday, session_start) in _ISO_WEEKDAY_SESSION_START_2_SLOT_NUMBER:
             for date in iso_weekday_2_dates[iso_weekday]:
-                targets.add((date, iso_weekday, start_time))
+                targets_with_priority.add((priority, date, iso_weekday, session_start))
         else:
             raise RuntimeError(f'rule: {rule} is not a valid gp slot')
 
-    return targets
+    # sort by input rule priority and then by date
+    targets_with_priority = list(targets_with_priority)
+    targets_with_priority = sorted(targets_with_priority, key=operator.itemgetter(1), reverse=True)
+    targets_with_priority = sorted(targets_with_priority, key=operator.itemgetter(0))
+    return [(date, iso_weekday, session_start) for (_, date, iso_weekday, session_start) in targets_with_priority]
 
 
 def booking_target_to_human_readable(target: Tuple[datetime.date, int, datetime.time]) -> str:

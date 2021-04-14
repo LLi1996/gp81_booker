@@ -22,7 +22,7 @@ def main():
     cfg.read(_config_file)
 
     booking_targets = gp81_flexbooker.parse_booking_rule(cfg['booking']['rule'])
-    logging.info(f'booking: {sorted([gp81_flexbooker.booking_target_to_human_readable(x) for x in booking_targets])}')
+    logging.info(f'booking: {[gp81_flexbooker.booking_target_to_human_readable(x) for x in booking_targets]}')
 
     logging.info(f'setting up selenium chrome driver')
     driver = webdriver.Chrome()
