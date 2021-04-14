@@ -7,7 +7,7 @@ import logging
 
 from selenium import webdriver
 
-from gp81_autobooker import gp81_flexbooker
+from src import gp81_flexbooker
 
 _config_file = './config.ini'
 
@@ -27,6 +27,7 @@ def main():
 
     try:
         gp81_flexbooker.login_and_go_to_calendar(driver, cfg)
+        date_on_first_column = gp81_flexbooker.get_booking_date_of_first_column(driver, cfg)
     except Exception as e:
         logging.exception(e)
     finally:
