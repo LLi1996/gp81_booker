@@ -247,17 +247,15 @@ def book(driver: webdriver.Chrome,
             "/html/body/div[@class='container']/div[@class='row']/div[@id='mainComponent']"
             "/div/div[@class='row customBookingFormRow']/div[@class='col-xs-12']/form[@id='scheduleBookingForm']"
             "/div[@class='row col-spacing-60 col-xs-spacing-30']/div[@class='form-group col-xs-12 col-md-12'][2]"
-            "/div[@class='pull-left'][1]/div[@class='checkbox-custom-booking']/label")
+            "/div[@class='pull-left'][2]/div[@class='checkbox-custom-booking']/label")
 
-        if (cfg['booking']['remind_by_email'] == 'true' and not remind_by_email.is_selected()) \
-                or (cfg['booking']['remind_by_email'] == 'false' and remind_by_email.is_selected()):
+        # by default remind by email is clicked and remind by text isn't todo: how do we figure out if it's clicked
+        if cfg['booking']['remind_by_email'] == 'false':
             remind_by_email.click()
 
-        if (cfg['booking']['remind_by_text'] == 'true' and not remind_by_text.is_selected()) \
-                or (cfg['booking']['remind_by_text'] == 'false' and remind_by_text.is_selected()):
+        if cfg['booking']['remind_by_text'] == 'true':
             remind_by_text.click()
 
-        logging.info('booking')
         book = driver.find_element_by_xpath(
             "/html/body/div[@class='container']/div[@class='row']/div[@id='mainComponent']"
             "/div/div[@class='row customBookingFormRow']/div[@class='col-xs-12']/form[@id='scheduleBookingForm']"
