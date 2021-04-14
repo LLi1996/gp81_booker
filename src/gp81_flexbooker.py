@@ -1,14 +1,21 @@
 """
 
 """
-
+import calendar
 import configparser
 import datetime
 import logging
 import time
-from typing import Tuple
+from collections import defaultdict
+from typing import Tuple, Set
+
 
 from selenium import webdriver
+
+_DAY_OF_WEEK_NAME_2_ISO_WEEKDAY = {
+    name.lower(): week_day + 1
+    for week_day, name in enumerate(calendar.day_name)
+}
 
 _ISO_WEEKDAY_2_FIRST_SESSION = {
     1: (datetime.datetime(1, 1, 1, 6, 0, 0), 7),
@@ -28,7 +35,7 @@ _ISO_WEEKDAY_2_SESSIONS = {
 }
 
 _ISO_WEEKDAY_SESSION_START_2_SLOT_NUMBER = {
-    (iso_weekday, session): i
+    (iso_weekday, session): i + 1
     for iso_weekday, sessions in _ISO_WEEKDAY_2_SESSIONS.items()
     for i, session in enumerate(sessions)
 }
@@ -48,6 +55,41 @@ def get_current_booking_date_range(today: datetime.datetime = None) -> Tuple[dat
         last_wednesday = last_wednesday - datetime.timedelta(days=7)
     saturday_two_weeks_out = last_wednesday + datetime.timedelta(days=17)
     return (today.date(), saturday_two_weeks_out.date())
+
+
+def parse_booking_rule(rule_csv: str,
+                       today: datetime.date = None) -> Set[Tuple[datetime.date, int, datetime.time]]:
+    """
+
+    :param rule_csv: comma separated value of: <full day of week name> hh:mm
+    :param today:
+    :return:
+    """
+    start, end = get_current_booking_date_range(today=today)
+    iso_weekday_2_dates = defaultdict(list)
+    date = start
+    while date <= end:
+        iso_weekday_2_dates[date.isoweekday()].append(date)
+        date = date + datetime.timedelta(days=1)
+
+    targets = set()
+    for rule in [x.strip().lower() for x in rule_csv.split(',')]:
+        day_of_week, start_time = rule.split(' ')
+        start_hour, start_minute = start_time.split(':')
+        iso_weekday = _DAY_OF_WEEK_NAME_2_ISO_WEEKDAY[day_of_week]
+        start_time = datetime.datetime(1, 1, 1, int(start_hour), int(start_minute), 0).time()
+        if (iso_weekday, start_time) in _ISO_WEEKDAY_SESSION_START_2_SLOT_NUMBER:
+            for date in iso_weekday_2_dates[iso_weekday]:
+                targets.add((date, iso_weekday, start_time))
+        else:
+            raise RuntimeError(f'rule: {rule} is not a valid gp slot')
+
+    return targets
+
+
+def booking_target_to_human_readable(target: Tuple[datetime.date, int, datetime.time]) -> str:
+    date, iso_weekday, session_start = target
+    return f'{date.strftime("%Y-%m-%d")} ({calendar.day_abbr[iso_weekday - 1]}) {session_start.strftime("%I:%M %p")}'
 
 
 def login_and_go_to_calendar(driver: webdriver.Chrome,
@@ -111,4 +153,110 @@ def get_booking_date_of_first_column(driver: webdriver.Chrome,
     booking_date = datetime.datetime.strptime(date_str, '%Y %b %d')
     if (booking_date.month == 12 and booking_date.day > 30) or (booking_date.month == 1 and booking_date.day < 10):
         logging.warning(f'we\'re close to the new year, check if the parsed date ({booking_date}) is correct')
-    return booking_date
+    return booking_date.date()
+
+
+def go_to_next_week(driver: webdriver.Chrome,
+                    cfg: configparser.ConfigParser):
+    assert driver.current_url == cfg['site']['calendar']
+    logging.info('clicking on the NEXT WEEK button')
+    next_week_button = driver.find_element_by_xpath(
+        "/html/body/div[@class='container']/div[@class='row']/div[@id='mainComponent']"
+        "/div/div[@id='widget-week-container']/a[@class='pull-right weekButton']")
+    next_week_button.click()
+
+def go_to_previous_week(driver: webdriver.Chrome,
+                        cfg: configparser.ConfigParser):
+    assert driver.current_url == cfg['site']['calendar']
+    logging.info('clicking on the PREVIOUS WEEK button')
+    next_week_button = driver.find_elements_by_link_text('« Previous Week')
+    next_week_button.click()
+
+
+def book(driver: webdriver.Chrome,
+         cfg: configparser.ConfigParser,
+         target: Tuple[datetime.date, int, datetime.time]):
+    logging.info(f'trying to book {booking_target_to_human_readable(target)}')
+    date, iso_weekday, session_start = target
+
+    if driver.current_url != cfg['site']['calendar']:
+        logging.info(f"on {driver.current_url}, navigating to {cfg['site']['calendar']}")
+        driver.get(cfg['site']['calendar'])
+
+    while 1:
+        date_of_first_column = get_booking_date_of_first_column(driver, cfg)
+        day_diff = (date - date_of_first_column).days
+        if day_diff >= 0 and day_diff < 7:  # target date on page, go book
+            logging.info(f'found target date ({date}) on current page (starts on {date_of_first_column})')
+            break
+        else:
+            logging.info(f'target date ({date}) not on current page (starts on {date_of_first_column})')
+            if day_diff >= 7:
+                go_to_next_week(driver, cfg)
+            else:
+                go_to_previous_week(driver, cfg)
+
+    col = day_diff + 1
+    row = _ISO_WEEKDAY_SESSION_START_2_SLOT_NUMBER[(iso_weekday, session_start)]
+    logging.info(f'determined the session to be at row #{row} col #{col}')
+
+    slot = driver.find_element_by_xpath(
+        "/html/body/div[@class='container']/div[@class='row']/div[@id='mainComponent']"
+        f"/div/div[@id='widget-week-container']/div[@class='widget-week-day'][{col}]"
+        f"/div[@class='widget-week-day-times']/div/a[@class='selectableTime service40166'][{row}]")
+
+    if 'WAIT LIST' in slot.text:
+        logging.warning(f'{booking_target_to_human_readable(target)} has a wait list, no action configured, skipping')
+        pass
+    else:
+        slot.click()
+
+        # usually this info is remembered by the browser/flexbooker but doesn't hurt to always put in
+        logging.info('filling in first name / last name / email / phone')
+
+        first_name = driver.find_element_by_xpath("//input[@id='fieldfirstName']")
+        first_name.clear()
+        first_name.send_keys(cfg['user']['first_name'])
+
+        last_name = driver.find_element_by_xpath("//input[@id='fieldlastName']")
+        last_name.clear()
+        last_name.send_keys(cfg['user']['last_name'])
+
+        email = driver.find_element_by_xpath("//input[@id='fieldemail']")
+        email.clear()
+        email.send_keys(cfg['user']['email'])
+
+        phone = driver.find_element_by_xpath("//input[@id='fieldphone']")
+        phone.clear()
+        phone.send_keys(cfg['user']['phone'])
+
+
+        logging.info(f"remind by email is {cfg['booking']['remind_by_email']}"
+                     f" and remind by text is {cfg['booking']['remind_by_text']}")
+        remind_by_email = driver.find_element_by_xpath(
+            "/html/body/div[@class='container']/div[@class='row']/div[@id='mainComponent']"
+            "/div/div[@class='row customBookingFormRow']/div[@class='col-xs-12']/form[@id='scheduleBookingForm']"
+            "/div[@class='row col-spacing-60 col-xs-spacing-30']/div[@class='form-group col-xs-12 col-md-12'][2]"
+            "/div[@class='pull-left'][1]/div[@class='checkbox-custom-booking']/label")
+
+        remind_by_text = driver.find_element_by_xpath(
+            "/html/body/div[@class='container']/div[@class='row']/div[@id='mainComponent']"
+            "/div/div[@class='row customBookingFormRow']/div[@class='col-xs-12']/form[@id='scheduleBookingForm']"
+            "/div[@class='row col-spacing-60 col-xs-spacing-30']/div[@class='form-group col-xs-12 col-md-12'][2]"
+            "/div[@class='pull-left'][1]/div[@class='checkbox-custom-booking']/label")
+
+        if (cfg['booking']['remind_by_email'] == 'true' and not remind_by_email.is_selected()) \
+                or (cfg['booking']['remind_by_email'] == 'false' and remind_by_email.is_selected()):
+            remind_by_email.click()
+
+        if (cfg['booking']['remind_by_text'] == 'true' and not remind_by_text.is_selected()) \
+                or (cfg['booking']['remind_by_text'] == 'false' and remind_by_text.is_selected()):
+            remind_by_text.click()
+
+        logging.info('booking')
+        book = driver.find_element_by_xpath(
+            "/html/body/div[@class='container']/div[@class='row']/div[@id='mainComponent']"
+            "/div/div[@class='row customBookingFormRow']/div[@class='col-xs-12']/form[@id='scheduleBookingForm']"
+            "/div[@class='row'][1]/div[@class='col-xs-12 text-center']/button[@class='btn btn-primary btn-primary-1']")
+        book.click()
+        logging.info(f'{booking_target_to_human_readable(target)} booked')
