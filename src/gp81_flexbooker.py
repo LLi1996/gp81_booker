@@ -9,7 +9,6 @@ import time
 from collections import defaultdict
 from typing import Tuple, Set
 
-
 from selenium import webdriver
 
 _DAY_OF_WEEK_NAME_2_ISO_WEEKDAY = {
@@ -140,7 +139,7 @@ def login_and_go_to_calendar(driver: webdriver.Chrome,
 
 def get_booking_date_of_first_column(driver: webdriver.Chrome,
                                      cfg: configparser.ConfigParser) -> datetime.date:
-    assert driver.current_url == cfg['site']['calendar']
+    assert 'calendar' in driver.current_url
 
     day_header = driver.find_element_by_xpath(
         "/html/body/div[@class='container']/div[@class='row']/div[@id='mainComponent']"
@@ -156,21 +155,22 @@ def get_booking_date_of_first_column(driver: webdriver.Chrome,
     return booking_date.date()
 
 
-def go_to_next_week(driver: webdriver.Chrome,
-                    cfg: configparser.ConfigParser):
+def go_to_another_week(driver: webdriver.Chrome,
+                       cfg: configparser.ConfigParser,
+                       forward=True):
     assert driver.current_url == cfg['site']['calendar']
-    logging.info('clicking on the NEXT WEEK button')
-    next_week_button = driver.find_element_by_xpath(
-        "/html/body/div[@class='container']/div[@class='row']/div[@id='mainComponent']"
-        "/div/div[@id='widget-week-container']/a[@class='pull-right weekButton']")
-    next_week_button.click()
-
-def go_to_previous_week(driver: webdriver.Chrome,
-                        cfg: configparser.ConfigParser):
-    assert driver.current_url == cfg['site']['calendar']
-    logging.info('clicking on the PREVIOUS WEEK button')
-    next_week_button = driver.find_elements_by_link_text('« Previous Week')
-    next_week_button.click()
+    if forward:
+        logging.info('clicking on the NEXT WEEK button')
+        button = driver.find_element_by_xpath(
+            "/html/body/div[@class='container']/div[@class='row']/div[@id='mainComponent']"
+            "/div/div[@id='widget-week-container']/a[@class='pull-right weekButton']")
+    else:
+        logging.info('clicking on the PREVIOUS WEEK button')
+        button = driver.find_element_by_xpath(
+            "/html/body/div[@class='container']/div[@class='row']/div[@id='mainComponent']"
+            "/div/div[@id='widget-week-container']/a[@class='pull-left weekButton']")
+    button.click()
+    time.sleep(.3)
 
 
 def book(driver: webdriver.Chrome,
@@ -179,7 +179,7 @@ def book(driver: webdriver.Chrome,
     logging.info(f'trying to book {booking_target_to_human_readable(target)}')
     date, iso_weekday, session_start = target
 
-    if driver.current_url != cfg['site']['calendar']:
+    if 'calendar' not in driver.current_url:
         logging.info(f"on {driver.current_url}, navigating to {cfg['site']['calendar']}")
         driver.get(cfg['site']['calendar'])
 
@@ -192,9 +192,9 @@ def book(driver: webdriver.Chrome,
         else:
             logging.info(f'target date ({date}) not on current page (starts on {date_of_first_column})')
             if day_diff >= 7:
-                go_to_next_week(driver, cfg)
+                go_to_another_week(driver, cfg, forward=True)
             else:
-                go_to_previous_week(driver, cfg)
+                go_to_another_week(driver, cfg, forward=False)
 
     col = day_diff + 1
     row = _ISO_WEEKDAY_SESSION_START_2_SLOT_NUMBER[(iso_weekday, session_start)]
@@ -230,9 +230,8 @@ def book(driver: webdriver.Chrome,
         phone.clear()
         phone.send_keys(cfg['user']['phone'])
 
-
-        logging.info(f"remind by email is {cfg['booking']['remind_by_email']}"
-                     f" and remind by text is {cfg['booking']['remind_by_text']}")
+        logging.info(f"<remind by email> is {cfg['booking']['remind_by_email']}"
+                     f" and <remind by text> is {cfg['booking']['remind_by_text']}")
         remind_by_email = driver.find_element_by_xpath(
             "/html/body/div[@class='container']/div[@class='row']/div[@id='mainComponent']"
             "/div/div[@class='row customBookingFormRow']/div[@class='col-xs-12']/form[@id='scheduleBookingForm']"
@@ -260,3 +259,7 @@ def book(driver: webdriver.Chrome,
             "/div[@class='row'][1]/div[@class='col-xs-12 text-center']/button[@class='btn btn-primary btn-primary-1']")
         book.click()
         logging.info(f'{booking_target_to_human_readable(target)} booked')
+
+        make_another_booking = driver.find_element_by_partial_link_text('Make Another Booking')
+        make_another_booking.click()
+        time.sleep(.3)
