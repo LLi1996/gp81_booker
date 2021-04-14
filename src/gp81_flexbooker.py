@@ -101,10 +101,10 @@ def login_and_go_to_calendar(driver: webdriver.Chrome,
     driver.get(cfg['site']['calendar'])
 
     if driver.find_elements_by_link_text('Sign In'):  # we need to log in
-        logging.info('sign in link found, will go sign in first')
+        logging.debug('sign in link found, will go sign in first')
 
         driver.get(cfg['site']['login'])
-        logging.info(f'navigated to {driver.current_url}')
+        logging.debug(f'navigated to {driver.current_url}')
 
         # todo is there a better way to do this
         user_email_input = driver.find_element_by_xpath(
@@ -120,7 +120,7 @@ def login_and_go_to_calendar(driver: webdriver.Chrome,
             "/div[@class='col-xs-12 col-md-4 col-md-push-4'][2]/div[@class='well']/form[@class='form']"
             "/button[@class='btn btn-primary btn-large']")
 
-        logging.info('filling in user email and password')
+        logging.debug('filling in user email and password')
         user_email_input.send_keys(cfg['credential']['email'])
         password_input.send_keys(cfg['credential']['password'])
 
@@ -129,7 +129,7 @@ def login_and_go_to_calendar(driver: webdriver.Chrome,
 
         # some basic sanity checks
         if driver.current_url.lower() == cfg['site']['calendar']:
-            logging.info(f'signed in, now on {driver.current_url}')
+            logging.debug(f'signed in, now on {driver.current_url}')
         elif driver.current_url.lower() == cfg['site']['login']:
             raise RuntimeError(f'Still on {driver.current_url}, seems like login failed, please check the configured'
                                f' user email and password')
@@ -139,7 +139,7 @@ def login_and_go_to_calendar(driver: webdriver.Chrome,
                             f" {cfg['site']['calendar']}")
             driver.get(cfg['site']['calendar'])
     else:  # no need to log in again, navigate to the calendar page
-        logging.info(f'no sign in link found, already logged in and on {driver.current_url}')
+        logging.debug(f'no sign in link found, already logged in and on {driver.current_url}')
 
 
 def get_booking_date_of_first_column(driver: webdriver.Chrome,
@@ -165,12 +165,12 @@ def go_to_another_week(driver: webdriver.Chrome,
                        forward=True):
     assert driver.current_url == cfg['site']['calendar']
     if forward:
-        logging.info('clicking on the NEXT WEEK button')
+        logging.debug('clicking on the NEXT WEEK button')
         button = driver.find_element_by_xpath(
             "/html/body/div[@class='container']/div[@class='row']/div[@id='mainComponent']"
             "/div/div[@id='widget-week-container']/a[@class='pull-right weekButton']")
     else:
-        logging.info('clicking on the PREVIOUS WEEK button')
+        logging.debug('clicking on the PREVIOUS WEEK button')
         button = driver.find_element_by_xpath(
             "/html/body/div[@class='container']/div[@class='row']/div[@id='mainComponent']"
             "/div/div[@id='widget-week-container']/a[@class='pull-left weekButton']")
@@ -185,17 +185,17 @@ def book(driver: webdriver.Chrome,
     date, iso_weekday, session_start = target
 
     if 'calendar' not in driver.current_url:
-        logging.info(f"on {driver.current_url}, navigating to {cfg['site']['calendar']}")
+        logging.debug(f"on {driver.current_url}, navigating to {cfg['site']['calendar']}")
         driver.get(cfg['site']['calendar'])
 
     while 1:
         date_of_first_column = get_booking_date_of_first_column(driver, cfg)
         day_diff = (date - date_of_first_column).days
         if day_diff >= 0 and day_diff < 7:  # target date on page, go book
-            logging.info(f'found target date ({date}) on current page (starts on {date_of_first_column})')
+            logging.debug(f'found target date ({date}) on current page (starts on {date_of_first_column})')
             break
         else:
-            logging.info(f'target date ({date}) not on current page (starts on {date_of_first_column})')
+            logging.debug(f'target date ({date}) not on page (starts on {date_of_first_column}) date_diff: {day_diff}')
             if day_diff >= 7:
                 go_to_another_week(driver, cfg, forward=True)
             else:
@@ -203,7 +203,7 @@ def book(driver: webdriver.Chrome,
 
     col = day_diff + 1
     row = _ISO_WEEKDAY_SESSION_START_2_SLOT_NUMBER[(iso_weekday, session_start)]
-    logging.info(f'determined the session to be at row #{row} col #{col}')
+    logging.debug(f'determined the session to be at row #{row} col #{col}')
 
     slot = driver.find_element_by_xpath(
         "/html/body/div[@class='container']/div[@class='row']/div[@id='mainComponent']"
@@ -217,7 +217,7 @@ def book(driver: webdriver.Chrome,
         slot.click()
 
         # usually this info is remembered by the browser/flexbooker but doesn't hurt to always put in
-        logging.info('filling in first name / last name / email / phone')
+        logging.debug('filling in first name / last name / email / phone')
 
         first_name = driver.find_element_by_xpath("//input[@id='fieldfirstName']")
         first_name.clear()
@@ -235,7 +235,7 @@ def book(driver: webdriver.Chrome,
         phone.clear()
         phone.send_keys(cfg['user']['phone'])
 
-        logging.info(f"<remind by email> is {cfg['booking']['remind_by_email']}"
+        logging.debug(f"<remind by email> is {cfg['booking']['remind_by_email']}"
                      f" and <remind by text> is {cfg['booking']['remind_by_text']}")
         remind_by_email = driver.find_element_by_xpath(
             "/html/body/div[@class='container']/div[@class='row']/div[@id='mainComponent']"

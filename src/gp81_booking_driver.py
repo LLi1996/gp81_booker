@@ -31,9 +31,6 @@ def main():
     cfg = configparser.ConfigParser()
     cfg.read(args.config_file)
 
-    booking_targets = gp81_flexbooker.parse_booking_rule(cfg['booking']['rule'])
-    logging.info(f'booking: {[gp81_flexbooker.booking_target_to_human_readable(x) for x in booking_targets]}')
-
     logging.info(f'setting up selenium chrome driver')
     driver = webdriver.Chrome()
     driver.implicitly_wait(int(cfg['site']['implicit_wait_secs']))
@@ -53,13 +50,17 @@ def main():
                                  f' sleeping {sleep_interval} secs')
                     time.sleep(sleep_interval)
 
+    booking_targets = gp81_flexbooker.parse_booking_rule(cfg['booking']['rule'])
+    logging.info(f'booking: {[gp81_flexbooker.booking_target_to_human_readable(x) for x in booking_targets]}')
+
     try:
         gp81_flexbooker.login_and_go_to_calendar(driver, cfg)
         for target in booking_targets:
             try:
                 gp81_flexbooker.book(driver, cfg, target)
             except Exception as e:
-                logging.error(f'failed to book {gp81_flexbooker.booking_target_to_human_readable(target)}: {e}')
+                logging.error(f'failed to book {gp81_flexbooker.booking_target_to_human_readable(target)}')
+                logging.exception(e)
     finally:
         logging.info('shutting down driver')
         driver.close()
