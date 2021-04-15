@@ -51,15 +51,18 @@ def main():
                     time.sleep(sleep_interval)
 
     booking_targets = booker.parse_booking_rule(cfg['booking']['rule'])
-    logging.info(f'booking: {[booker.booking_target_to_human_readable(x) for x in booking_targets]}')
 
     try:
         booker.login_and_go_to_calendar(driver, cfg)
         upcoming_bookings = booker.get_upcoming_bookings(driver, cfg)
-        logging.info(f'preexisting bookings (these will be skipped):'
+        logging.info(f'preexisting bookings:'
                      f' {sorted([booker.booking_target_to_human_readable(x) for x in upcoming_bookings])}')
 
-        for target in [x for x in booking_targets if x not in upcoming_bookings]:
+        logging.info(f'booking: {[booker.booking_target_to_human_readable(x) for x in booking_targets]}')
+        for target in booking_targets:
+            if target in upcoming_bookings:
+                logging.info(f'{booker.booking_target_to_human_readable(target)} is already booked, skipping')
+                continue
             try:
                 booker.book(driver, cfg, target)
             except Exception as e:
