@@ -8,8 +8,9 @@ import logging
 import operator
 import time
 from collections import defaultdict
-from typing import Tuple, Set
+from typing import Tuple, List, Set
 
+import selenium.common.exceptions
 from selenium import webdriver
 
 _DAY_OF_WEEK_NAME_2_ISO_WEEKDAY = {
@@ -58,7 +59,7 @@ def get_current_booking_date_range(today: datetime.datetime = None) -> Tuple[dat
 
 
 def parse_booking_rule(rule_csv: str,
-                       today: datetime.date = None) -> Set[Tuple[datetime.date, int, datetime.time]]:
+                       today: datetime.date = None) -> List[Tuple[datetime.date, int, datetime.time]]:
     """
 
     :param rule_csv: comma separated value of: <full day of week name> hh:mm
@@ -89,6 +90,31 @@ def parse_booking_rule(rule_csv: str,
     targets_with_priority = sorted(targets_with_priority, key=operator.itemgetter(1), reverse=True)
     targets_with_priority = sorted(targets_with_priority, key=operator.itemgetter(0))
     return [(date, iso_weekday, session_start) for (_, date, iso_weekday, session_start) in targets_with_priority]
+
+
+def get_upcoming_bookings(driver: webdriver.Chrome,
+                          cfg: configparser.ConfigParser) -> Set[Tuple[datetime.date, int, datetime.time]]:
+    if 'calendar' not in driver.current_url:
+        driver.get(cfg['site']['calendar'])
+    manage_upcoming_bookings_button = driver.find_element_by_link_text('Manage Upcoming Bookings')
+    manage_upcoming_bookings_button.click()
+
+    upcoming_booking_slot = 1
+    upcoming_bookings = set()
+    while 1:
+        try:
+            slot = driver.find_element_by_xpath(
+                f"/html/body/div[@class='container']/div[@class='row']/div[@id='mainComponent']/div/div[@class='row']"
+                f"/div[@class='col-xs-12'][1]/div[{upcoming_booking_slot}]/div[@class='apptBox']/p[1]")
+            booking_datetime = datetime.datetime.strptime(slot.text.split(' / ')[0].strip(), '%m/%d/%Y %I:%M %p')
+            if booking_datetime < datetime.datetime.now():
+                break
+            else:
+                upcoming_bookings.add((booking_datetime.date(), booking_datetime.isoweekday(), booking_datetime.time()))
+                upcoming_booking_slot += 1
+        except selenium.common.exceptions.NoSuchElementException as e:
+            break
+    return upcoming_bookings
 
 
 def booking_target_to_human_readable(target: Tuple[datetime.date, int, datetime.time]) -> str:
@@ -236,7 +262,7 @@ def book(driver: webdriver.Chrome,
         phone.send_keys(cfg['user']['phone'])
 
         logging.debug(f"<remind by email> is {cfg['booking']['remind_by_email']}"
-                     f" and <remind by text> is {cfg['booking']['remind_by_text']}")
+                      f" and <remind by text> is {cfg['booking']['remind_by_text']}")
         remind_by_email = driver.find_element_by_xpath(
             "/html/body/div[@class='container']/div[@class='row']/div[@id='mainComponent']"
             "/div/div[@class='row customBookingFormRow']/div[@class='col-xs-12']/form[@id='scheduleBookingForm']"

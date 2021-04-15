@@ -10,7 +10,7 @@ import time
 
 from selenium import webdriver
 
-from src import gp81_flexbooker
+from src import gp81_flexbooker as booker
 
 
 def main():
@@ -50,16 +50,20 @@ def main():
                                  f' sleeping {sleep_interval} secs')
                     time.sleep(sleep_interval)
 
-    booking_targets = gp81_flexbooker.parse_booking_rule(cfg['booking']['rule'])
-    logging.info(f'booking: {[gp81_flexbooker.booking_target_to_human_readable(x) for x in booking_targets]}')
+    booking_targets = booker.parse_booking_rule(cfg['booking']['rule'])
+    logging.info(f'booking: {[booker.booking_target_to_human_readable(x) for x in booking_targets]}')
 
     try:
-        gp81_flexbooker.login_and_go_to_calendar(driver, cfg)
-        for target in booking_targets:
+        booker.login_and_go_to_calendar(driver, cfg)
+        upcoming_bookings = booker.get_upcoming_bookings(driver, cfg)
+        logging.info(f'preexisting bookings (these will be skipped):'
+                     f' {sorted([booker.booking_target_to_human_readable(x) for x in upcoming_bookings])}')
+
+        for target in [x for x in booking_targets if x not in upcoming_bookings]:
             try:
-                gp81_flexbooker.book(driver, cfg, target)
+                booker.book(driver, cfg, target)
             except Exception as e:
-                logging.error(f'failed to book {gp81_flexbooker.booking_target_to_human_readable(target)}')
+                logging.error(f'failed to book {booker.booking_target_to_human_readable(target)}')
                 logging.exception(e)
     finally:
         logging.info('shutting down driver')
