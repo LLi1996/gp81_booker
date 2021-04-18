@@ -17,7 +17,7 @@ def main():
     ap = argparse.ArgumentParser(description='gp81 booker')
     ap.add_argument('--wednesday_noon', action='store_true',
                     help='flag to wait till 1 sec past 12 on Wednesdays before any booking action')
-    ap.add_argument('--config_file', default='./config.ini',
+    ap.add_argument('--config_file', default='../config.ini',
                     help='path to the config file')
     ap.add_argument('--logging_level', default='INFO',
                     help='choice of [CRITICAL, ERROR, WARNING, INFO, DEBUG], default: debug')
