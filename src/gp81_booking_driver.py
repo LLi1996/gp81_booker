@@ -23,7 +23,7 @@ def main():
                     help='choice of [CRITICAL, ERROR, WARNING, INFO, DEBUG], default: debug')
     args = ap.parse_args()
 
-    logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s',
+    logging.basicConfig(format='%(asctime)s %(levelname)s %(funcName)s(): %(message)s',
                         datefmt='%Y-%m-%d %H:%M:%S',
                         level=args.logging_level)
 

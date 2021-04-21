@@ -122,6 +122,18 @@ def booking_target_to_human_readable(target: Tuple[datetime.date, int, datetime.
     return f'{date.strftime("%Y-%m-%d")} ({calendar.day_abbr[iso_weekday - 1]}) {session_start.strftime("%I:%M %p")}'
 
 
+def _go_to_calendar(driver: webdriver.Chrome,
+                    cfg: configparser.ConfigParser):
+    if driver.current_url.lower() == cfg['site']['calendar']:
+        logging.debug('already on calendar page, will not do anything')
+    elif 'calendar' in driver.current_url.lower():
+        logging.debug(f'it seems like we are on the calendar page but the url ({driver.current_url})'
+                      f' did not match 100%, will not do anything')
+    else:
+        logging.debug(f"navigating to {cfg['site']['calendar']}")
+        driver.get(cfg['site']['calendar'])
+
+
 def login_and_go_to_calendar(driver: webdriver.Chrome,
                              cfg: configparser.ConfigParser):
     driver.get(cfg['site']['calendar'])
@@ -163,14 +175,14 @@ def login_and_go_to_calendar(driver: webdriver.Chrome,
             logging.warning(f"was expecting automated navigation to {cfg['site']['calendar']} after login, we are at"
                             f" {driver.current_url} instead. Unsure if login failed, will navigate to"
                             f" {cfg['site']['calendar']}")
-            driver.get(cfg['site']['calendar'])
+            _go_to_calendar(driver, cfg)
     else:  # no need to log in again, navigate to the calendar page
         logging.debug(f'no sign in link found, already logged in and on {driver.current_url}')
 
 
 def get_booking_date_of_first_column(driver: webdriver.Chrome,
                                      cfg: configparser.ConfigParser) -> datetime.date:
-    assert 'calendar' in driver.current_url
+    _go_to_calendar(driver, cfg)
 
     day_header = driver.find_element_by_xpath(
         "/html/body/div[@class='container']/div[@class='row']/div[@id='mainComponent']"
@@ -179,7 +191,8 @@ def get_booking_date_of_first_column(driver: webdriver.Chrome,
     header_text = day_header.text  # this looks like: Fri\nApr 16th
     date_str = header_text.split('\n')[-1][:-2]  # takes out things before the linebreak and after the date numbers
     date_str = f'{(datetime.date.today().year)} {date_str}'  # we assume things are in this year todo is this valid?
-    logging.debug(f'header text of first booking column was: {header_text}, we made it {date_str} to parse')
+    logging.debug(f"header text of first booking column was: {header_text.encode('unicode_escape')},"
+                  f' we made it {date_str} to parse')
     booking_date = datetime.datetime.strptime(date_str, '%Y %b %d')
     if (booking_date.month == 12 and booking_date.day > 30) or (booking_date.month == 1 and booking_date.day < 10):
         logging.warning(f'we\'re close to the new year, check if the parsed date ({booking_date}) is correct')
@@ -189,7 +202,8 @@ def get_booking_date_of_first_column(driver: webdriver.Chrome,
 def go_to_another_week(driver: webdriver.Chrome,
                        cfg: configparser.ConfigParser,
                        forward=True):
-    assert driver.current_url == cfg['site']['calendar']
+    _go_to_calendar(driver, cfg)
+
     if forward:
         logging.debug('clicking on the NEXT WEEK button')
         button = driver.find_element_by_xpath(
